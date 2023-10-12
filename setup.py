@@ -8,7 +8,7 @@ import warnings
 from packaging.version import parse, Version
 import setuptools
 import torch
-from torch.utils.cpp_extension import BuildExtension, CUDAExtension, CUDA_HOME
+from torch.utils.cpp_extension import BuildExtension, CppExtension, CUDAExtension, CUDA_HOME
 
 ROOT_DIR = os.path.dirname(__file__)
 
@@ -24,6 +24,7 @@ ABI = 1 if torch._C._GLIBCXX_USE_CXX11_ABI else 0
 CXX_FLAGS += [f"-D_GLIBCXX_USE_CXX11_ABI={ABI}"]
 NVCC_FLAGS += [f"-D_GLIBCXX_USE_CXX11_ABI={ABI}"]
 
+'''
 if CUDA_HOME is None:
     raise RuntimeError(
         "Cannot find CUDA_HOME. CUDA must be available to build the package.")
@@ -123,20 +124,31 @@ for capability in compute_capabilities:
 if nvcc_cuda_version >= Version("11.2"):
     num_threads = min(os.cpu_count(), 8)
     NVCC_FLAGS += ["--threads", str(num_threads)]
+'''
 
 ext_modules = []
 
+extra_compile_args = {"cxx": []}
+extra_compile_args["cxx"].append("-fopenmp")
+extra_compile_args["cxx"].append("-O3")
+extra_compile_args["cxx"].append("-march=skylake-avx512")
+extra_compile_args["cxx"].append("-mavx512f")
+extra_compile_args["cxx"].append("-DCPU_CAPABILITY_AVX512")
+extra_compile_args["cxx"].append("-Wno-unknown-pragmas")
+extra_compile_args["cxx"].append("-Wno-array-bounds")
+
 # Cache operations.
-cache_extension = CUDAExtension(
+cache_extension = CppExtension(
     name="vllm.cache_ops",
-    sources=["csrc/cache.cpp", "csrc/cache_kernels.cu"],
-    extra_compile_args={
-        "cxx": CXX_FLAGS,
-        "nvcc": NVCC_FLAGS,
-    },
-)
+    sources=["csrc/cache.cpp", "csrc/cpu/cache_kernels.cpp"],
+    extra_compile_args=extra_compile_args,
+    )
+
 ext_modules.append(cache_extension)
 
+
+
+'''
 # Attention kernels.
 attention_extension = CUDAExtension(
     name="vllm.attention_ops",
@@ -205,7 +217,7 @@ cuda_utils_extension = CUDAExtension(
     },
 )
 ext_modules.append(cuda_utils_extension)
-
+'''
 
 def get_path(*filepath) -> str:
     return os.path.join(ROOT_DIR, *filepath)

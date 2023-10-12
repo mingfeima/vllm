@@ -5,6 +5,8 @@ import torch
 
 from vllm import cache_ops
 
+DEVICES = ["cpu"]
+#DEVICES = ["cpu", "cuda"]
 DTYPES = [torch.half, torch.bfloat16, torch.float]
 NUM_TOKENS = [7, 83, 2048]  # Arbitrary values for testing
 NUM_LAYERS = [5]  # Arbitrary values for testing
@@ -15,7 +17,7 @@ NUM_BLOCKS = [1024]  # Arbitrary values for testing
 NUM_MAPPINGS = [32, 256]  # Arbitrary values for testing
 SEEDS = [0]
 
-
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("num_mappings", NUM_MAPPINGS)
 @pytest.mark.parametrize("num_layers", NUM_LAYERS)
 @pytest.mark.parametrize("num_heads", NUM_HEADS)
@@ -27,6 +29,7 @@ SEEDS = [0]
 @torch.inference_mode()
 def test_copy_blocks(
     kv_cache_factory,
+    device: str,
     num_mappings: int,
     num_layers: int,
     num_heads: int,
@@ -38,7 +41,8 @@ def test_copy_blocks(
 ) -> None:
     random.seed(seed)
     torch.random.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
+    if device == "cuda":
+        torch.cuda.manual_seed(seed)
 
     # Generate random block mappings where each source block is mapped to two
     # destination blocks.
@@ -81,6 +85,7 @@ def test_copy_blocks(
         assert torch.allclose(value_cache, cloned_value_cache)
 
 
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("num_tokens", NUM_TOKENS)
 @pytest.mark.parametrize("num_heads", NUM_HEADS)
 @pytest.mark.parametrize("head_size", HEAD_SIZES)
@@ -91,6 +96,7 @@ def test_copy_blocks(
 @torch.inference_mode()
 def test_reshape_and_cache(
     kv_cache_factory,
+    device: str,
     num_tokens: int,
     num_heads: int,
     head_size: int,
@@ -101,19 +107,20 @@ def test_reshape_and_cache(
 ) -> None:
     random.seed(seed)
     torch.random.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
+    if device == "cuda":
+        torch.cuda.manual_seed(seed)
 
     # Create a random slot mapping.
     num_slots = block_size * num_blocks
     slot_mapping = random.sample(range(num_slots), num_tokens)
-    slot_mapping = torch.tensor(slot_mapping, dtype=torch.int, device="cuda")
+    slot_mapping = torch.tensor(slot_mapping, dtype=torch.int, device=device)
 
     qkv = torch.randn(num_tokens,
                       3,
                       num_heads,
                       head_size,
                       dtype=dtype,
-                      device="cuda")
+                      device=device)
     _, key, value = qkv.unbind(dim=1)
 
     # Create the KV caches.
